@@ -52,6 +52,46 @@ export const buildTree = (nodes: any[]): TreeNode=>{
   return buildTree(sortedNodes)
 }
 
-// select two node smallest and add (node.value + node.freq)
-// rearrange
-// select tow node include one one but need to select value
+export const generateTable = (node: any, table:any={}, path =''):Record<string, string>=>{
+  const rN = node.rightNode
+  const lN = node.leftNode
+
+  if (rN){
+    path += '1'
+    if (rN?.character){
+      table[rN?.character] = path
+    } else {
+      generateTable(rN, table, path)
+    }
+  }
+
+  if (lN){
+    path += '0'
+    if (lN?.character){
+      table[lN?.character]=path
+    } else {
+      generateTable(lN, table,path)
+    }
+  }
+
+  return table
+}
+
+export const encodeText = (text: string, table: Record<string, string>)=>{
+  if (!text || !Object.values(table).length) return ''
+
+  return text.split('').map(c => table[c]).join('')
+}
+
+export function bitsToBytes(bitString: string) {
+  if (!bitString) return new Uint8Array()
+
+  const padding = (8 - (bitString.length % 8)) % 8;
+  const paddedBitString = bitString + '0'.repeat(padding);
+  const byteArray = [];
+  for (let i = 0; i < paddedBitString.length; i += 8) {
+      const byte = paddedBitString.slice(i, i + 8);
+      byteArray.push(parseInt(byte, 2)); // Convert binary string to integer
+  }
+  return new Uint8Array(byteArray);
+}
