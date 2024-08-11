@@ -1,4 +1,12 @@
-export const readTextFile =async (path: string)=>!path ? '': Bun.file(__dirname + path).text()
+export const readTextFile =async (path: string)=>{
+  const f = await Bun.file(__dirname + path)
+
+  if (!f.exists()){
+    throw new Error('File not found')
+  }
+
+  return f
+}
 
 export const getFreq = (text: string)=>text?.split('').reduce((acc, val) => {
   acc[val] = acc[val] ? acc[val] + 1 : 1
@@ -95,3 +103,10 @@ export function bitsToBytes(bitString: string) {
   }
   return new Uint8Array(byteArray);
 }
+
+export const generateHeader = (freqs: Record<string, number>, fileSize: number)=> ({
+    version: "1.0",
+    originalFileSize: fileSize,
+    characterFrequencies: freqs,
+    algo: 'huffman'
+})
