@@ -1,3 +1,6 @@
+import { $ } from "bun"
+import { appendFile } from "node:fs/promises";
+
 export const readTextFile =async (path: string)=>{
   const f = await Bun.file(__dirname + path)
 
@@ -104,9 +107,171 @@ export function bitsToBytes(bitString: string) {
   return new Uint8Array(byteArray);
 }
 
+export function bytesToBits(bytesArray: ArrayBuffer) {
+  const fixedArray = new Uint8Array(bytesArray)
+
+  const bitArray = [];
+  for (const byte of fixedArray) {
+      const bits = byte.toString(2).padStart(8, '0');
+      bitArray.push(bits);
+  }
+
+  return bitArray
+}
+
 export const generateHeader = (freqs: Record<string, number>, fileSize: number)=> ({
     version: "1.0",
     originalFileSize: fileSize,
     characterFrequencies: freqs,
     algo: 'huffman'
 })
+
+export const buildEssential = (text: string = '', frq:Record<string, number> = {})=>{
+  const freqs: Record<string, number> = Object.keys(frq).length ? frq  :getFreq(text)
+
+  const nodes = Object.entries(freqs).map(([char, frq]) => new TreeChildNode(char, frq))
+
+  const tree = buildTree(nodes)
+
+  const table = generateTable(tree)
+
+  return {
+    freqs,
+    table,
+    tree
+  }
+}
+
+export const parseBitToCharacter = (bitsString: string, tree: any = {})=>{
+  if (Object.keys(tree).length === 0) return String.fromCharCode(parseInt(bitsString, 2))
+
+
+  return //
+}
+
+export const parseBitsToText = (bitsString: string[], tree: any = {})=>{
+  if (Object.keys(tree).length === 0) return bitsString.map(d => parseBitToCharacter(d)).join('')
+
+  return bitsString.join('').split('').reduce((acc, bit)=>{
+    acc += parseBitToCharacter(bit, tree)
+
+    return acc
+  }, '')
+}
+
+export const getHeader = (bits: string[])=>{
+  const hStartBits = ['00111100', '01101000', '01100101', '01100001', '01100100', '01100101', '01110010', '00111110']
+  const hEndBits = ['00111100', '00101111', '01101000', '01100101', '01100001', '01100100', '01100101', '01110010', '00111110']
+
+  const bitStart = bits.slice(0, hStartBits.length)
+
+  if (bitStart.join('') !== hStartBits.join('')){
+    throw new Error('Cannot find header start: Bad metadata')
+  }
+
+  let headerEndIndexBit = -1
+
+  for (let i = hStartBits.length; i < bits.length; i++){
+    if (bits[i] !== hEndBits[0]) continue
+
+    let found = true
+    for (let j = 0; j < hEndBits.length; j++){
+      if (bits[i+j] !== hEndBits[j]){
+        found = false
+        break
+      }
+    }
+
+    if (found){
+      headerEndIndexBit = i + hEndBits.length
+      break
+    }
+  }
+
+  if (headerEndIndexBit === -1){
+    throw new Error('Cannot find header end: Bad metadata')
+  }
+
+  const headerBits = bits.slice(0, headerEndIndexBit)
+  const rawHeader = parseBitsToText(headerBits) || ''
+  const header = rawHeader.replaceAll('<header>', '').replaceAll('</header>', '')
+
+  try {
+    return { header: JSON.parse(header), headerEndIndexBit }
+  } catch (e){
+    throw new Error('Cannot parse header: Bad metadata')
+  }
+}
+
+// Convert bytes to KB, MB, GB, or TB and format the output
+function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024; // 1 KB = 1024 Bytes
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  const formattedSize = parseFloat((bytes / Math.pow(k, i)).toFixed(decimals));
+  return `${formattedSize} ${sizes[i]}`;
+}
+
+// Convert KB, MB, GB, or TB back to bytes
+function convertToBytes(value: number, unit: string): number {
+  const unitMap: { [key: string]: number } = {
+    Bytes: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4
+  };
+
+  const unitUpperCase = unit.toUpperCase();
+  if (unitUpperCase in unitMap) {
+    return value * unitMap[unitUpperCase];
+  } else {
+    throw new Error('Invalid unit. Please use "Bytes", "KB", "MB", "GB", or "TB".');
+  }
+}
+
+export const compressionTool ={
+  encoding: async (cmdArgs: any)=>{
+    const iFile = await readTextFile('/'+ (cmdArgs.encode || cmdArgs.decode))
+
+    const text = await iFile.text()
+
+    const { freqs, table } = buildEssential(text)
+
+    const encodedText = encodeText(text, table)
+
+    const header = generateHeader(freqs, iFile.size)
+    const convertedByteHeader = `<header>${JSON.stringify(header)}</header>`
+    const convertedByteString = bitsToBytes(encodedText)
+    const totalBytes = Buffer.byteLength(convertedByteHeader) + Buffer.byteLength(convertedByteString)
+
+    await $`rm -f ${cmdArgs.outputFileName}`
+
+    await appendFile(cmdArgs.outputFileName, convertedByteHeader)
+    await appendFile(cmdArgs.outputFileName, convertedByteString)
+
+    await $`echo compression done!! reduced ${(Math.round((iFile.size - totalBytes) / iFile.size * 100))}% [${((iFile.size - totalBytes)/1000000).toFixed(1)}mb] of file size. `
+    await $`du -sh ${cmdArgs.encode}`
+    await $`du -sh ${cmdArgs.outputFileName}`
+  },
+  decoding: async (cmdArgs: any)=>{
+    const iFile = await readTextFile('/'+ (cmdArgs.encode || cmdArgs.decode))
+
+    const decodedArrayBuffer = await iFile.arrayBuffer()
+    const decodedBits = bytesToBits(decodedArrayBuffer)
+    const { header, headerEndIndexBit } = getHeader(decodedBits)
+
+    const { freqs,tree } = buildEssential('', header.characterFrequencies)
+
+    const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), tree) || ''
+
+    await $`rm -f ${cmdArgs.outputFileName}`
+    await appendFile(cmdArgs.outputFileName, decodedText)
+    await $`echo extracted ${formatBytes(header.originalFileSize)} of file size. `
+  }
+}
+
+export const main = async (cmdArgs: any)=> cmdArgs.encode ? compressionTool.encoding(cmdArgs) : compressionTool.decoding(cmdArgs)
