@@ -1,59 +1,29 @@
 import { $ } from "bun"
 import { appendFile } from "node:fs/promises";
+import { MermaidGraph, TreeChildNode, TreeNode } from "./classes";
 
-export const readTextFile =async (path: string)=>{
+export const readTextFile = async (path: string) => {
   const f = await Bun.file(__dirname + path)
 
-  if (!f.exists()){
+  if (!f.exists()) {
     throw new Error('File not found')
   }
 
   return f
 }
 
-export const getFreq = (text: string)=>text?.split('').reduce((acc, val) => {
+export const getFreq = (text: string) => text?.split('').reduce((acc, val) => {
   acc[val] = acc[val] ? acc[val] + 1 : 1
   return acc
 }, {} as any)
 
-export class TreeChildNode {
-  public character: string
-  public freq: number
 
-  constructor(character: string, freq: number){
-    this.character = character
-    this.freq = freq
-  }
-}
+export const buildTree = (nodes: any[]): TreeNode => {
+  const sortedNodes = nodes.sort((a, b) => (a?.value || a.freq) - (b?.value || b.freq))
 
-export class TreeNode{
-  public value: number;
-  public rightNode: null | TreeNode | TreeChildNode
-  public leftNode: null | TreeNode | TreeChildNode
+  if (sortedNodes.length === 1) return sortedNodes[0]
 
-  constructor(){
-    this.value = 0
-    this.rightNode = null
-    this.leftNode = null
-  }
-
-  setRightNode(n: null | TreeNode | TreeChildNode){
-    this.rightNode = n //@ts-ignore
-    this.value += n?.value || n?.freq || 0
-  }
-
-  setLeftNode(n: null | TreeNode | TreeChildNode){
-    this.leftNode = n //@ts-ignore
-    this.value += n?.value || n?.freq || 0
-  }
-}
-
-export const buildTree = (nodes: any[]): TreeNode=>{
-  const sortedNodes = nodes.sort((a,b)=> (a?.value || a.freq )- (b?.value || b.freq))
-
-  if (sortedNodes.length ===1 ) return sortedNodes[0]
-
-  const [f,s] = sortedNodes.splice(0,2)
+  const [f, s] = sortedNodes.splice(0, 2)
   const treeNode = new TreeNode()
   treeNode.setLeftNode(f)
   treeNode.setRightNode(s)
@@ -63,32 +33,32 @@ export const buildTree = (nodes: any[]): TreeNode=>{
   return buildTree(sortedNodes)
 }
 
-export const generateTable = (node: any, table:any={}, path =''):Record<string, string>=>{
+export const generateTable = (node: any, table: any = {}, path = ''): Record<string, string> => {
   const rN = node.rightNode
   const lN = node.leftNode
 
-  if (rN){
+  if (rN) {
     path += '1'
-    if (rN?.character){
+    if (rN?.character) {
       table[rN?.character] = path
     } else {
       generateTable(rN, table, path)
     }
   }
 
-  if (lN){
+  if (lN) {
     path += '0'
-    if (lN?.character){
-      table[lN?.character]=path
+    if (lN?.character) {
+      table[lN?.character] = path
     } else {
-      generateTable(lN, table,path)
+      generateTable(lN, table, path)
     }
   }
 
   return table
 }
 
-export const encodeText = (text: string, table: Record<string, string>)=>{
+export const encodeText = (text: string, table: Record<string, string>) => {
   if (!text || !Object.values(table).length) return ''
 
   return text.split('').map(c => table[c]).join('')
@@ -101,8 +71,8 @@ export function bitsToBytes(bitString: string) {
   const paddedBitString = bitString + '0'.repeat(padding);
   const byteArray = [];
   for (let i = 0; i < paddedBitString.length; i += 8) {
-      const byte = paddedBitString.slice(i, i + 8);
-      byteArray.push(parseInt(byte, 2)); // Convert binary string to integer
+    const byte = paddedBitString.slice(i, i + 8);
+    byteArray.push(parseInt(byte, 2)); // Convert binary string to integer
   }
   return new Uint8Array(byteArray);
 }
@@ -112,26 +82,31 @@ export function bytesToBits(bytesArray: ArrayBuffer) {
 
   const bitArray = [];
   for (const byte of fixedArray) {
-      const bits = byte.toString(2).padStart(8, '0');
-      bitArray.push(bits);
+    const bits = byte.toString(2).padStart(8, '0');
+    bitArray.push(bits);
   }
 
   return bitArray
 }
 
-export const generateHeader = (freqs: Record<string, number>, fileSize: number)=> ({
-    version: "1.0",
-    originalFileSize: fileSize,
-    characterFrequencies: freqs,
-    algo: 'huffman'
+export const generateHeader = (freqs: Record<string, number>, fileSize: number) => ({
+  version: "1.0",
+  originalFileSize: fileSize,
+  characterFrequencies: freqs,
+  algo: 'huffman'
 })
 
-export const buildEssential = (text: string = '', frq:Record<string, number> = {})=>{
-  const freqs: Record<string, number> = Object.keys(frq).length ? frq  :getFreq(text)
+export const buildEssential = async (text: string = '', frq: Record<string, number> = {}) => {
+  const freqs: Record<string, number> = Object.keys(frq).length ? frq : getFreq(text)
 
   const nodes = Object.entries(freqs).map(([char, frq]) => new TreeChildNode(char, frq))
 
   const tree = buildTree(nodes)
+
+  const mermaid = new MermaidGraph(tree)
+
+  await $`rm -f  mermaidgraph.md`
+  await appendFile('mermaidgraph.md', mermaid.generate())
 
   const table = generateTable(tree)
 
@@ -142,53 +117,86 @@ export const buildEssential = (text: string = '', frq:Record<string, number> = {
   }
 }
 
-export const parseBitToCharacter = (bitsString: string, tree: any = {})=>{
-  if (Object.keys(tree).length === 0) return String.fromCharCode(parseInt(bitsString, 2))
+const dest = (p: string, t: TreeNode) => p === '0' ? t.leftNode : t.rightNode
 
+export const traverseNode = (paths: string[], tree: TreeNode) => {
+  if (!paths.length) return null
 
-  return //
+  let parsedTxt = ''
+  const initialLength = paths.length
+  console.log('--------parsedTxt', parsedTxt)
+  while (paths.length !== 0) {
+    const path = paths.shift()
+
+    if (!path) throw new Error('Invalid path')
+
+    const n = dest(path, tree)
+    if (n instanceof TreeChildNode && n.character) {
+      console.log('--------n.character', n.character)
+      parsedTxt += n.character
+    } else if (n instanceof TreeNode && (n.leftNode || n.rightNode)) {
+      parsedTxt += traverseNode(paths, n)
+    } else {
+      throw new Error('Invalid tree node')
+    }
+
+    const percentComplete = ((initialLength - paths.length) / initialLength) * 100
+    process.stdout.write(`Percent complete: ${percentComplete.toFixed(2)}%\r`)
+  }
+
+  return parsedTxt
 }
 
-export const parseBitsToText = (bitsString: string[], tree: any = {})=>{
+export const parseBitsCustom = (bitsString: string[], tree: any) => {
+  let parsedTxt = ''
+
+  if (!bitsString.length) return parsedTxt
+
+  if (!tree) throw new Error('Missing Tree to traverse')
+
+  return traverseNode(bitsString, tree)
+}
+
+export const parseBitToCharacter = (bitsString: string) => {
+  return String.fromCharCode(parseInt(bitsString, 2))
+}
+
+export const parseBitsToText = (bitsString: string[], tree: any = {}) => {
   if (Object.keys(tree).length === 0) return bitsString.map(d => parseBitToCharacter(d)).join('')
 
-  return bitsString.join('').split('').reduce((acc, bit)=>{
-    acc += parseBitToCharacter(bit, tree)
-
-    return acc
-  }, '')
+  return parseBitsCustom(bitsString.join('').split(''), tree)
 }
 
-export const getHeader = (bits: string[])=>{
+export const getHeader = (bits: string[]) => {
   const hStartBits = ['00111100', '01101000', '01100101', '01100001', '01100100', '01100101', '01110010', '00111110']
   const hEndBits = ['00111100', '00101111', '01101000', '01100101', '01100001', '01100100', '01100101', '01110010', '00111110']
 
   const bitStart = bits.slice(0, hStartBits.length)
 
-  if (bitStart.join('') !== hStartBits.join('')){
+  if (bitStart.join('') !== hStartBits.join('')) {
     throw new Error('Cannot find header start: Bad metadata')
   }
 
   let headerEndIndexBit = -1
 
-  for (let i = hStartBits.length; i < bits.length; i++){
+  for (let i = hStartBits.length; i < bits.length; i++) {
     if (bits[i] !== hEndBits[0]) continue
 
     let found = true
-    for (let j = 0; j < hEndBits.length; j++){
-      if (bits[i+j] !== hEndBits[j]){
+    for (let j = 0; j < hEndBits.length; j++) {
+      if (bits[i + j] !== hEndBits[j]) {
         found = false
         break
       }
     }
 
-    if (found){
+    if (found) {
       headerEndIndexBit = i + hEndBits.length
       break
     }
   }
 
-  if (headerEndIndexBit === -1){
+  if (headerEndIndexBit === -1) {
     throw new Error('Cannot find header end: Bad metadata')
   }
 
@@ -198,13 +206,13 @@ export const getHeader = (bits: string[])=>{
 
   try {
     return { header: JSON.parse(header), headerEndIndexBit }
-  } catch (e){
+  } catch (e) {
     throw new Error('Cannot parse header: Bad metadata')
   }
 }
 
 // Convert bytes to KB, MB, GB, or TB and format the output
-function formatBytes(bytes: number, decimals = 2): string {
+const formatBytes = (bytes: number, decimals = 2): string => {
   if (bytes === 0) return '0 Bytes';
 
   const k = 1024; // 1 KB = 1024 Bytes
@@ -215,31 +223,13 @@ function formatBytes(bytes: number, decimals = 2): string {
   return `${formattedSize} ${sizes[i]}`;
 }
 
-// Convert KB, MB, GB, or TB back to bytes
-function convertToBytes(value: number, unit: string): number {
-  const unitMap: { [key: string]: number } = {
-    Bytes: 1,
-    KB: 1024,
-    MB: 1024 ** 2,
-    GB: 1024 ** 3,
-    TB: 1024 ** 4
-  };
-
-  const unitUpperCase = unit.toUpperCase();
-  if (unitUpperCase in unitMap) {
-    return value * unitMap[unitUpperCase];
-  } else {
-    throw new Error('Invalid unit. Please use "Bytes", "KB", "MB", "GB", or "TB".');
-  }
-}
-
-export const compressionTool ={
-  encoding: async (cmdArgs: any)=>{
-    const iFile = await readTextFile('/'+ (cmdArgs.encode || cmdArgs.decode))
+export const compressionTool = {
+  encoding: async (cmdArgs: any) => {
+    const iFile = await readTextFile('/' + (cmdArgs.encode || cmdArgs.decode))
 
     const text = await iFile.text()
 
-    const { freqs, table } = buildEssential(text)
+    const { freqs, table } = await buildEssential(text)
 
     const encodedText = encodeText(text, table)
 
@@ -253,18 +243,18 @@ export const compressionTool ={
     await appendFile(cmdArgs.outputFileName, convertedByteHeader)
     await appendFile(cmdArgs.outputFileName, convertedByteString)
 
-    await $`echo compression done!! reduced ${(Math.round((iFile.size - totalBytes) / iFile.size * 100))}% [${((iFile.size - totalBytes)/1000000).toFixed(1)}mb] of file size. `
+    await $`echo compression done!! reduced ${(Math.round((iFile.size - totalBytes) / iFile.size * 100))}% [${((iFile.size - totalBytes) / 1000000).toFixed(1)}mb] of file size. `
     await $`du -sh ${cmdArgs.encode}`
     await $`du -sh ${cmdArgs.outputFileName}`
   },
-  decoding: async (cmdArgs: any)=>{
-    const iFile = await readTextFile('/'+ (cmdArgs.encode || cmdArgs.decode))
+  decoding: async (cmdArgs: any) => {
+    const iFile = await readTextFile('/' + (cmdArgs.encode || cmdArgs.decode))
 
     const decodedArrayBuffer = await iFile.arrayBuffer()
     const decodedBits = bytesToBits(decodedArrayBuffer)
     const { header, headerEndIndexBit } = getHeader(decodedBits)
 
-    const { freqs,tree } = buildEssential('', header.characterFrequencies)
+    const { freqs, tree } = await buildEssential('', header.characterFrequencies)
 
     const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), tree) || ''
 
@@ -274,4 +264,4 @@ export const compressionTool ={
   }
 }
 
-export const main = async (cmdArgs: any)=> cmdArgs.encode ? compressionTool.encoding(cmdArgs) : compressionTool.decoding(cmdArgs)
+export const main = async (cmdArgs: any) => cmdArgs.encode ? compressionTool.encoding(cmdArgs) : compressionTool.decoding(cmdArgs)
