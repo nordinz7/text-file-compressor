@@ -105,8 +105,7 @@ export const buildEssential = async (text: string = '', frq: Record<string, numb
 
   const mermaid = new MermaidGraph(tree)
 
-  await $`rm -f  mermaidgraph.md`
-  await appendFile('mermaidgraph.md', mermaid.generate())
+
 
   const table = generateTable(tree)
 
@@ -124,7 +123,7 @@ export const traverseNode = (paths: string[], tree: TreeNode) => {
 
   let parsedTxt = ''
   const initialLength = paths.length
-  console.log('--------parsedTxt', parsedTxt)
+
   while (paths.length !== 0) {
     const path = paths.shift()
 
@@ -132,7 +131,6 @@ export const traverseNode = (paths: string[], tree: TreeNode) => {
 
     const n = dest(path, tree)
     if (n instanceof TreeChildNode && n.character) {
-      console.log('--------n.character', n.character)
       parsedTxt += n.character
     } else if (n instanceof TreeNode && (n.leftNode || n.rightNode)) {
       parsedTxt += traverseNode(paths, n)
@@ -229,7 +227,9 @@ export const compressionTool = {
 
     const text = await iFile.text()
 
-    const { freqs, table } = await buildEssential(text)
+    const { freqs, table, tree } = await buildEssential(text)
+
+    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphEncoding.md')
 
     const encodedText = encodeText(text, table)
 
@@ -255,6 +255,8 @@ export const compressionTool = {
     const { header, headerEndIndexBit } = getHeader(decodedBits)
 
     const { freqs, tree } = await buildEssential('', header.characterFrequencies)
+
+    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphEncoding.md')
 
     const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), tree) || ''
 

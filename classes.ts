@@ -1,3 +1,5 @@
+import { $ } from "bun"
+import { appendFile } from "node:fs/promises";
 
 export class TreeChildNode {
   public character: string
@@ -38,33 +40,31 @@ type MermaidGraphOpts = {
 export class MermaidGraph {
   public uniqueIdGenerationCount
   public alphaCharacters
-  public rootNode
+  public initialNode
   public opts
+  public generatedGraphText: string[]
+  public output
 
   constructor(node: TreeNode, opts: MermaidGraphOpts = { graphDirection: 'TD' }) {
     this.uniqueIdGenerationCount = 0
     this.alphaCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    this.rootNode = node
+    this.initialNode = node
     this.opts = opts
+    this.generatedGraphText = []
+    this.output = ''
   }
 
-  generate() {
+  async generate(fileName: string = 'mermaidgraph.md') {
+    this.buildGraph(this.initialNode)
+    this.wrapWithHeader()
+
+    await $`rm -f  ${fileName}`
+    await appendFile(fileName, this.output)
+  }
+
+  wrapWithHeader() {
     const header = `graph ${this.opts.graphDirection};`
-    const tree = this.generateTreeNode(this.rootNode)
-
-    return `
-    :::mermaid
-      ${header}
-      ${tree}
-    :::
-    `.split('\n').reduce((acc, line) => {
-      const trimmedLine = line.trim()
-
-      if (!trimmedLine.length || trimmedLine === ';') return acc
-
-      acc.push(trimmedLine)
-      return acc
-    }, [] as string[]).join('\n')
+    this.output = [':::mermaid', header, ...this.generatedGraphText, ':::'].join('\n')
   }
 
   generateNodeId() {
@@ -80,20 +80,46 @@ export class MermaidGraph {
     return id
   }
 
-  generateTreeNode(node: TreeNode): string {
-    const rootNodeId = this.generateNodeId()
+  buildGraph(node: TreeNode, previousNodeId: null | string = null) {
+    const nodeId = this.generateNodeId()
+    const rootNode = this.generateRootNode(node, nodeId)
 
-    return `
-      ${rootNodeId}((${node.value})) --> ${this.generateTreeChildNode(node.leftNode)};
-      ${rootNodeId} --> ${this.generateTreeChildNode(node.rightNode)};
-    `
+    if (previousNodeId) {
+      this.generatedGraphText.push(this.linkNode(previousNodeId, rootNode))
+    } else {
+      this.generatedGraphText.push(rootNode)
+    }
+
+    const rN = node.rightNode
+    const lN = node.leftNode
+
+    const nodes = [rN, lN]
+
+    nodes.forEach((n) => {
+
+      if (n instanceof TreeChildNode) {
+        const nNode = this.generateChildNode(n)
+        this.generatedGraphText.push(this.linkNode(nodeId, nNode))
+      } else if (n instanceof TreeNode) {
+        this.buildGraph(n, nodeId)
+      }
+    })
   }
 
-  generateTreeChildNode(node: TreeChildNode | TreeNode | null): string {
-    if (!node) return ''
 
-    if (node instanceof TreeNode) return this.generateTreeNode(node)
+  generateRootNode(node: TreeNode, nodeId: string = this.generateNodeId()): string {
+    return `${nodeId}((${node.value}))`
+  }
 
-    return `${this.generateNodeId()}["${node.character}" ${node.freq}]`
+  generateChildNode(node: TreeChildNode): string {
+    return `${this.generateNodeId()}["${this.sanitizeCharacter(node.character)} ${node.freq}"]`
+  }
+
+  sanitizeCharacter(character: string) {
+    return character === '"' ? '""' : character
+  }
+
+  linkNode(rootNodeId: string, childNode: string) {
+    return `${rootNodeId} --> ${childNode}`
   }
 }
