@@ -1,4 +1,4 @@
-# txt-compressor
+# text-file-compressor
 
 A simple text compressor that uses the Huffman algorithm to compress and decompress text file.
 
