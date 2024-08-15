@@ -256,12 +256,12 @@ export const compressionTool = {
 
     const { freqs, tree } = await buildEssential('', header.characterFrequencies)
 
-    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphEncoding.md')
+    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphDecoding.md')
 
     const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), tree) || ''
 
     await $`rm -f ${cmdArgs.outputFileName}`
-    await appendFile(cmdArgs.outputFileName, decodedText)
+    await appendFile(cmdArgs.outputFileName, 'decodedText')
     await $`echo extracted ${formatBytes(header.originalFileSize)} of file size. `
   }
 }
