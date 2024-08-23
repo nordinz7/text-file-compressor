@@ -37,6 +37,11 @@ type MermaidGraphOpts = {
   graphDirection: 'TD' | 'LR' | 'BT' | 'RL'
 }
 
+enum NodeSide {
+  left = 'left',
+  right = 'right'
+}
+
 export class MermaidGraph {
   public uniqueIdGenerationCount
   public alphaCharacters
@@ -80,9 +85,9 @@ export class MermaidGraph {
     return id
   }
 
-  buildGraph(node: TreeNode, previousNodeId: null | string = null) {
+  buildGraph(node: TreeNode, previousNodeId: null | string = null, side: NodeSide | null = null) {
     const nodeId = this.generateNodeId()
-    const rootNode = this.generateRootNode(node, nodeId)
+    const rootNode = this.generateRootNode(node, side, nodeId)
 
     if (previousNodeId) {
       this.generatedGraphText.push(this.linkNode(previousNodeId, rootNode))
@@ -93,26 +98,30 @@ export class MermaidGraph {
     const rN = node.rightNode
     const lN = node.leftNode
 
-    const nodes = [rN, lN]
+    const nodes = [{ node: rN, side: NodeSide.right }, { node: lN, side: NodeSide.left }]
 
     nodes.forEach((n) => {
-
-      if (n instanceof TreeChildNode) {
-        const nNode = this.generateChildNode(n)
+      if (n.node instanceof TreeChildNode) {
+        const nNode = this.generateChildNode(n.node, n.side)
         this.generatedGraphText.push(this.linkNode(nodeId, nNode))
-      } else if (n instanceof TreeNode) {
-        this.buildGraph(n, nodeId)
+      } else if (n.node instanceof TreeNode) {
+        this.buildGraph(n.node, nodeId, n.side)
       }
     })
   }
 
 
-  generateRootNode(node: TreeNode, nodeId: string = this.generateNodeId()): string {
-    return `${nodeId}((${node.value}))`
+  generateRootNode(node: TreeNode, side: NodeSide | null = null, nodeId: string = this.generateNodeId()): string {
+    const t = `${nodeId}((${node.value}))`
+    return side ? `${this.generatePathText(side)} ${t}` : t
   }
 
-  generateChildNode(node: TreeChildNode): string {
-    return `${this.generateNodeId()}["${this.sanitizeCharacter(node.character)} ${node.freq}"]`
+  generateChildNode(node: TreeChildNode, side: NodeSide): string {
+    return `${this.generatePathText(side)} ${this.generateNodeId()}["${this.sanitizeCharacter(node.character)} ${node.freq}"]`
+  }
+
+  generatePathText(side: NodeSide) {
+    return `|${side === NodeSide.left ? 0 : 1}|`
   }
 
   sanitizeCharacter(character: string) {
