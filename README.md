@@ -21,7 +21,7 @@ bun install
 bun index.ts <encode|decode> <input file> [options]
 ```
 
-or using script
+or using script command
 
 ```
 dev -- <encode|decode> <input file> [options]
@@ -38,7 +38,7 @@ This project was created using `bun init` in bun v1.1.18. [Bun](https://bun.sh) 
 
 ### Sample of mermaid diagram:
 
-:::mermaid
+```mermaid
 graph TD;
 A((16))
 A --> |1| B((10))
@@ -49,6 +49,6 @@ B --> |0| F((4))
 F --> |1| G["o 3"]
 F --> |0| H["i 1"]
 A --> |0| I["n 6"]
-:::
+```
 
 To view on vscode you can use the [Mermaid Preview](https://marketplace.visualstudio.com/items?itemName=vstirbu.vscode-mermaid-preview) extension.
