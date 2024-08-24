@@ -39,8 +39,8 @@ export const generateTable = (node: any, table: any = {}, path = ''): Record<str
 
   if (rN) {
     const newPath = path + '1';
-    if (rN?.character) {
-      table[rN?.character] = newPath
+    if (TreeNode.isTreeChildNode(rN)) {
+      table[rN.character] = newPath
     } else {
       generateTable(rN, table, newPath)
     }
@@ -48,8 +48,8 @@ export const generateTable = (node: any, table: any = {}, path = ''): Record<str
 
   if (lN) {
     const newPath = path + '0';
-    if (lN?.character) {
-      table[lN?.character] = newPath
+    if (TreeNode.isTreeChildNode(lN)) {
+      table[lN.character] = newPath
     } else {
       generateTable(lN, table, newPath)
     }
@@ -114,10 +114,6 @@ export const buildEssential = async (text: string = '', frq: Record<string, numb
 
 const nextNode = (p: string, t: TreeNode) => p === '0' ? t.leftNode : t.rightNode
 
-const isTreeNode = (n: any) => n instanceof TreeNode || n?.value
-
-const isTreeChildNode = (n: any) => n instanceof TreeChildNode || n?.character
-
 export const traverseNodes = (paths: string[], node: TreeNode | TreeChildNode, initialTree: TreeNode, txt: string = '',): string => {
   if (!paths.length) return txt
 
@@ -131,7 +127,7 @@ export const traverseNodes = (paths: string[], node: TreeNode | TreeChildNode, i
   n = nextNode(path, node)
 
 
-  if (isTreeChildNode(n)) { //@ts-ignore
+  if (TreeNode.isTreeChildNode(n)) { //@ts-ignore
     txt += n.character
     return traverseNodes(paths, initialTree, initialTree, txt)
   }
@@ -248,6 +244,7 @@ export const compressionTool = {
     const decodedArrayBuffer = await iFile.arrayBuffer()
     const decodedBits = bytesToBits(decodedArrayBuffer)
     const { header, headerEndIndexBit } = getHeader(decodedBits)
+
     if (cmdArgs.mermaid) new MermaidGraph(header.tree).generate('mermaidgraphDecoding.md')
 
     const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), header.tree) || ''

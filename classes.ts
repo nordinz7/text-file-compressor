@@ -31,6 +31,14 @@ export class TreeNode {
     this.leftNode = n //@ts-ignore
     this.value += n?.value || n?.freq || 0
   }
+
+  static isTreeNode(obj: any): obj is TreeNode {
+    return obj instanceof TreeNode || obj && obj.value !== undefined
+  }
+
+  static isTreeChildNode(obj: any): obj is TreeChildNode {
+    return obj instanceof TreeChildNode || obj && obj.character !== undefined
+  }
 }
 
 type MermaidGraphOpts = {
@@ -101,10 +109,10 @@ export class MermaidGraph {
     const nodes = [{ node: rN, side: NodeSide.right }, { node: lN, side: NodeSide.left }]
 
     nodes.forEach((n) => {
-      if (n.node instanceof TreeChildNode) {
+      if (TreeNode.isTreeChildNode(n.node)) {
         const nNode = this.generateChildNode(n.node, n.side)
         this.generatedGraphText.push(this.linkNode(nodeId, nNode))
-      } else if (n.node instanceof TreeNode) {
+      } else if (TreeNode.isTreeNode(n.node)) {
         this.buildGraph(n.node, nodeId, n.side)
       }
     })
