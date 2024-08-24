@@ -38,20 +38,20 @@ export const generateTable = (node: any, table: any = {}, path = ''): Record<str
   const lN = node.leftNode
 
   if (rN) {
-    path += '1'
+    const newPath = path + '1';
     if (rN?.character) {
-      table[rN?.character] = path
+      table[rN?.character] = newPath
     } else {
-      generateTable(rN, table, path)
+      generateTable(rN, table, newPath)
     }
   }
 
   if (lN) {
-    path += '0'
+    const newPath = path + '0';
     if (lN?.character) {
-      table[lN?.character] = path
+      table[lN?.character] = newPath
     } else {
-      generateTable(lN, table, path)
+      generateTable(lN, table, newPath)
     }
   }
 
@@ -89,11 +89,10 @@ export function bytesToBits(bytesArray: ArrayBuffer) {
   return bitArray
 }
 
-export const generateHeader = (freqs: Record<string, number>, fileSize: number) => ({
+export const generateHeader = (headers: Record<string, any>) => ({
   version: "1.0",
-  originalFileSize: fileSize,
-  characterFrequencies: freqs,
-  algo: 'huffman'
+  algo: 'huffman',
+  ...headers
 })
 
 export const buildEssential = async (text: string = '', frq: Record<string, number> = {}) => {
@@ -102,9 +101,6 @@ export const buildEssential = async (text: string = '', frq: Record<string, numb
   const nodes = Object.entries(freqs).map(([char, frq]) => new TreeChildNode(char, frq))
 
   const tree = buildTree(nodes)
-
-  const mermaid = new MermaidGraph(tree)
-
 
 
   const table = generateTable(tree)
@@ -116,33 +112,32 @@ export const buildEssential = async (text: string = '', frq: Record<string, numb
   }
 }
 
-const dest = (p: string, t: TreeNode) => p === '0' ? t.leftNode : t.rightNode
+const nextNode = (p: string, t: TreeNode) => p === '0' ? t.leftNode : t.rightNode
 
-export const traverseNode = (paths: string[], tree: TreeNode) => {
-  if (!paths.length) return null
+const isTreeNode = (n: any) => n instanceof TreeNode || n?.value
 
-  let parsedTxt = ''
-  const initialLength = paths.length
+const isTreeChildNode = (n: any) => n instanceof TreeChildNode || n?.character
 
-  while (paths.length !== 0) {
-    const path = paths.shift()
+export const traverseNodes = (paths: string[], node: TreeNode | TreeChildNode, initialTree: TreeNode, txt: string = '',): string => {
+  if (!paths.length) return txt
 
-    if (!path) throw new Error('Invalid path')
+  const path = paths.shift()
 
-    const n = dest(path, tree)
-    if (n instanceof TreeChildNode && n.character) {
-      parsedTxt += n.character
-    } else if (n instanceof TreeNode && (n.leftNode || n.rightNode)) {
-      parsedTxt += traverseNode(paths, n)
-    } else {
-      throw new Error('Invalid tree node')
-    }
+  if (!path || !node) return txt
 
-    const percentComplete = ((initialLength - paths.length) / initialLength) * 100
-    process.stdout.write(`Percent complete: ${percentComplete.toFixed(2)}%\r`)
+  let n: TreeNode | TreeChildNode | undefined | null = null
+
+  //@ts-ignore
+  n = nextNode(path, node)
+
+
+  if (isTreeChildNode(n)) { //@ts-ignore
+    txt += n.character
+    return traverseNodes(paths, initialTree, initialTree, txt)
   }
 
-  return parsedTxt
+  //@ts-ignore
+  return traverseNodes(paths, n, initialTree, txt)
 }
 
 export const parseBitsCustom = (bitsString: string[], tree: any) => {
@@ -152,7 +147,7 @@ export const parseBitsCustom = (bitsString: string[], tree: any) => {
 
   if (!tree) throw new Error('Missing Tree to traverse')
 
-  return traverseNode(bitsString, tree)
+  return traverseNodes(bitsString, tree, tree, '')
 }
 
 export const parseBitToCharacter = (bitsString: string) => {
@@ -227,13 +222,13 @@ export const compressionTool = {
 
     const text = await iFile.text()
 
-    const { freqs, table, tree } = await buildEssential(text)
+    const definition = await buildEssential(text)
 
-    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphEncoding.md')
+    if (cmdArgs.mermaid) new MermaidGraph(definition.tree).generate('mermaidgraphEncoding.md')
 
-    const encodedText = encodeText(text, table)
+    const encodedText = encodeText(text, definition.table)
 
-    const header = generateHeader(freqs, iFile.size)
+    const header = generateHeader({ originalFileSize: iFile.size, ...definition })
     const convertedByteHeader = `<header>${JSON.stringify(header)}</header>`
     const convertedByteString = bitsToBytes(encodedText)
     const totalBytes = Buffer.byteLength(convertedByteHeader) + Buffer.byteLength(convertedByteString)
@@ -253,15 +248,12 @@ export const compressionTool = {
     const decodedArrayBuffer = await iFile.arrayBuffer()
     const decodedBits = bytesToBits(decodedArrayBuffer)
     const { header, headerEndIndexBit } = getHeader(decodedBits)
+    if (cmdArgs.mermaid) new MermaidGraph(header.tree).generate('mermaidgraphDecoding.md')
 
-    const { freqs, tree } = await buildEssential('', header.characterFrequencies)
-
-    if (cmdArgs.mermaid) new MermaidGraph(tree).generate('mermaidgraphDecoding.md')
-
-    const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), tree) || ''
+    const decodedText = parseBitsToText(decodedBits.slice(headerEndIndexBit), header.tree) || ''
 
     await $`rm -f ${cmdArgs.outputFileName}`
-    await appendFile(cmdArgs.outputFileName, 'decodedText')
+    await appendFile(cmdArgs.outputFileName, decodedText)
     await $`echo extracted ${formatBytes(header.originalFileSize)} of file size. `
   }
 }
